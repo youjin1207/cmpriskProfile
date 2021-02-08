@@ -6,6 +6,13 @@ J = 100 # the number of centers
 nJ = 200 # the number of subjects per each center
 N = J*nJ # total number of subjects in the simulated data
 
+## multivariate normal
+set.seed(1234)
+U = mvrnorm(100, mu = c(0,0), Sigma = matrix(c(1, -0.2, -0.2, 1) , 2, 2))
+phi1 = 0.00 + 0.03*plogis(U[,1])
+phi2 = 0.10 + 0.10*plogis(U[,2])
+
+
 # generate covariates under scenario (iii)
 X1 = X2 = X3 = X4 = X5 = matrix(0, nrow = J, ncol = nJ)
 for(j in 1:J){
@@ -20,20 +27,17 @@ for(j in 1:J){
 }
 
 T0 = Delta = C0 = Censor = Y0 = matrix(0, nrow = J, ncol = nJ);
-beta1 = c(0.5, 0.5)*2
-beta2 = c(-0.5, -0.5)*2
-beta3 = c(1, 0.5)*2
-beta4 = c(0, 1)*2
-beta5 = c(0.5, 1)*2
-# generate scale parameters for Weibull-distributed baselines 
-tmp = mvrnorm(100, c(0,0), matrix(c(1, -0.2, -0.2, 1), 2, 2))
-phi = cbind(0.005 +0.012*plogis(tmp[,1]),  0.003 + 0.008*plogis(tmp[,2]))
+beta1 = c(1, -1)*2
+beta2 = c(1, -1)*2
+beta3 = c(0.5, -1)*2
+beta4 = c(-1, 0.5)*2
+beta5 = c(0.5, 0.5)*2
+gammas = rep(-0.5, 5)*2
 tau = 3/2 # shape parameter
 # 
 for(j in 1:J){
-  phis = c()
-  phis[1] = phi[j,1]
-  phis[2] = phi[j,2]
+  phis[1] = phi1[j]
+  phis[2] = phi2[j]
   W1 = runif(nJ, 0, 1)
   T0[j,] = (-log(W1) / (exp(beta1[1]*X1[j,] + beta2[1]*X2[j,] + 
                               beta3[1]*X3[j,] + beta4[1]*X4[j,] + beta5[1]*X5[j,])*(phis[1])^(tau) + 
@@ -44,9 +48,14 @@ for(j in 1:J){
   csh2 = (T0[j,])^(tau - 1)*exp(beta1[2]*X1[j,] + beta2[2]*X2[j,] + 
                                   beta3[2]*X3[j,] + beta4[2]*X4[j,] + beta5[2]*X5[j,])*(phis[2]^(tau))*tau
   Delta[j,] = rbinom(nJ, 1, csh1 / (csh1 + csh2))
-  C0[j,] = runif(nJ, 10, 30) # random censoring 
-  Censor[j,] = T0[j,] <= C0[j,] # censoring indicator
-  Y0[j,] = pmin(T0[j,], C0[j,]) # observed failure times
+  
+  W2 = runif(nJ, 0, 1)
+  C0[j,] = (-log(W2) / (0.5*exp(gammas[1]*X1[j,] + gammas[2]*X2[j,] + 
+                                  gammas[3]*X3[j,] + gammas[4]*X4[j,] + gammas[5]*X5[j,])))
+  
+  Censor[j,] = T0[j,] <= C0[j,]
+  
+  Y0[j,] = pmin(T0[j,], C0[j,])
 }
 
 sim1 = data.frame(timeto = as.numeric(t(Y0)), X1 = as.numeric(t(X1)), 
@@ -65,10 +74,12 @@ sim1$W5 = sim1$X5
 # fit cause-specific hazards to derive prognostic scores for each cause
 sim1$cause1 = sim1$Delta == 1 & sim1$Censor == 1
 sim1$cause2 = sim1$Delta == 0 & sim1$Censor == 1
-fit1 = coxph( Surv(timeto, cause1) ~ X1 + X2 + X3 + X4 + X5 + strata(center), data = sim1) # misspecified case
-fit2 = coxph( Surv(timeto, cause2) ~ X1 + X2 + X3 + X4 + X5 + strata(center), data = sim1) # misspecified case
-#fit1 = coxph( Surv(timeto, cause1) ~ W1 + W2 + W3 + W4 + W5 + strata(center), data = sim1) # misspecified case
-#fit2 = coxph( Surv(timeto, cause2) ~ W1 + W2 + W3 + W4 + W5 + strata(center), data = sim1) # misspecified case
+fit1 = coxph( Surv(timeto, cause1) ~ X1 + X2 + X3 + X4 + X5 + strata(center), data = sim1) # correctly specified case
+fit2 = coxph( Surv(timeto, cause2) ~ X1 + X2 + X3 + X4 + X5 + strata(center), data = sim1) # correctly specified case
+#fit1 = coxph( Surv(timeto, cause1) ~ W1 + W2 + W3 + W4 + W5 + strata(center), data = sim1) # misspecified covariates case
+#fit2 = coxph( Surv(timeto, cause2) ~ W1 + W2 + W3 + W4 + W5 + strata(center), data = sim1) # misspecified covariates case
+#first.scores.whole = additive.score.sim.competing(dat = sim1, cause = 1) # misspecified prognostic score model
+#second.scores.whole = additive.score.sim.competing(dat = sim1, cause = 2) # misspecified prognostic score model
 first.scores.whole = predict(fit1, reference = "sample")
 second.scores.whole = predict(fit2, reference = "sample")
 sim1$first.scores.whole = first.scores.whole
@@ -177,8 +188,7 @@ sim1$obs.Y = sim1$timeto
 sim1$center = sim1$center
 sim1$Delta = ifelse(sim1$cause1 == 1, 1, ifelse(sim1$cause2 == 1, 2, 0))
 dat = sim1
-F1var.est = F2var.est = F1var.if = F2var.if = c()
-F1var.est.uw = F2var.est.uw = F1var.if.uw = F2var.if.uw = c()
+F1var.if = F2var.if = c()
 for(k in 1:100){
   if.result = IF.cif.weight(dat[dat$center == k, ], 20, 2, weight = TRUE)
   F1var.if[k] = sum((if.result[,1])^2)/(nrow(dat[dat$center == k, ]))^2 

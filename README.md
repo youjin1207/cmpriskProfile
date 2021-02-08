@@ -9,9 +9,11 @@ We use the Scientific Registry or Transplant Recipients (SRTR) data for data app
 
 ## Code
 
-- `Code/auxfunctions.R` : provides auxiliary functions to construct risk classes as a form of the matrix with a fixed dimension and to estimates variance of the CIF. 
+- `Code/auxfunctions.R` : provides auxiliary functions to construct risk classes as a form of the matrix with a fixed dimension, to derive a prognostic score from a stratified additive hazards model, and to estimate the variance of a CIF. 
 
-- `Code/sim.R` : provides the data generating process for the simulation data presented in the paper. 
+- `Code/sim1.R` : provides the data generating process under scenario (i) presented in the paper.
+
+- `Code/sim2.R` : provides the data generating process under scenario (ii) presented in the paper.
 
 - `Code/read_SRTR` : reads the data and implements some exploratory analysis. 
  
